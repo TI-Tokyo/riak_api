@@ -1,12 +1,8 @@
-.eunit/*
-deps/*
-priv/*
+*~
 *.o
 *.beam
-doc
-ebin
+.eunit/
 .local_dialyzer_plt
-.rebar3/
 _build/
 rebar.lock
-log/*
+include/*_pb.hrl
