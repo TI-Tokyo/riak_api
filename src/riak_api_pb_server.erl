@@ -32,7 +32,6 @@
 
 -include_lib("riak_pb/include/riak_pb.hrl").
 -include_lib("public_key/include/public_key.hrl").
--include("stacktrace.hrl").
 
 -compile({nowarn_deprecated_function, 
             [{gen_fsm, start_link, 3},
@@ -67,6 +66,8 @@
 
 -type format() :: {format, term()} | {format, io:format(), [term()]}.
 -export_type([format/0]).
+
+-include_lib("kernel/include/logger.hrl").
 
 -ifdef(deprecated_21).
 ssl_handshake(Socket, SslOpts) ->
@@ -129,7 +130,7 @@ wait_for_socket({set_socket, Socket}, _From, State=#state{transport={_Transport,
                                                        peername=PeerInfo}}
             end;
         {error, Reason} ->
-            lager:debug("Could not get PB socket peername: ~p", [Reason]),
+            ?LOG_DEBUG("Could not get PB socket peername: ~p", [Reason]),
             %% It's not really "ok", but there's no reason for the
             %% listener to crash just because this socket had an
             %% error. See riak_api#54.
@@ -154,17 +155,17 @@ wait_for_tls({msg, MsgCode, _MsgData}, State=#state{socket=Socket,
                         {error, _Reason} ->
                             undefined
                     end,
-                    lager:debug("STARTTLS succeeded, peer's common name was ~p",
+                    ?LOG_DEBUG("STARTTLS succeeded, peer's common name was ~p",
                                [CommonName]),
                     {next_state, wait_for_auth,
                      State#state{socket=NewSocket, common_name=CommonName, transport={ssl,ssl}}};
                 {error, Reason} ->
-                    lager:warning("STARTTLS with client ~s failed: ~p",
+                    ?LOG_WARNING("STARTTLS with client ~s failed: ~p",
                                   [format_peername(State#state.peername), Reason]),
                     {stop, {error, {startls_failed, Reason}}, State}
             end;
         _ ->
-            lager:debug("Client sent unexpected message code ~p", [MsgCode]),
+            ?LOG_DEBUG("Client sent unexpected message code ~p", [MsgCode]),
             State1 = send_error_and_flush("Security is enabled, please STARTTLS first",
                                  State),
             {next_state, wait_for_tls, State1}
@@ -189,7 +190,7 @@ wait_for_auth({msg, MsgCode, MsgData}, State=#state{socket=Socket,
                                                                   {common_name,
                                                                    State#state.common_name}]) of
                 {ok, SecurityContext} ->
-                    lager:debug("authentication for ~p from ~p succeeded",
+                    ?LOG_DEBUG("authentication for ~p from ~p succeeded",
                                [User, PeerIP]),
                     AuthResp = riak_pb_codec:msg_code(rpbauthresp),
                     Transport:send(Socket, <<1:32/unsigned-big, AuthResp:8>>),
@@ -202,7 +203,7 @@ wait_for_auth({msg, MsgCode, MsgData}, State=#state{socket=Socket,
                     timer:sleep(5000),
                     State1 = send_error_and_flush("Authentication failed",
                                                   State),
-                    lager:debug("authentication for ~p from ~p failed: ~p",
+                    ?LOG_DEBUG("authentication for ~p from ~p failed: ~p",
                                [User, PeerIP, Reason]),
                     case State#state.retries of
                         N when N =< 1 ->
@@ -256,8 +257,8 @@ connected({msg, MsgCode, MsgData}, State=#state{states=ServiceStates}) ->
                                                    State#state{security=NewCtx})
                                 end
                         end;
-                    {error, Reason} ->
-                        send_error("Message decoding error: ~p", [Reason], State)
+                    {error, DecodeError} ->
+                        send_error("Message decoding error: ~p", [DecodeError], State)
                 end;
             error ->
                 case riak_pb_codec:msg_code(rpbstarttls) of
@@ -270,11 +271,10 @@ connected({msg, MsgCode, MsgData}, State=#state{states=ServiceStates}) ->
         {next_state, connected, NewState}
     catch
         %% Tell the client we errored before closing the connection.
-        ?_exception_(Type, Failure, StackTrace) ->
-            Trace = ?_get_stacktrace_(StackTrace),
+        Class:Reason:StackTrace ->
             FState = send_error_and_flush({format, "Error processing incoming message: ~p:~p:~p",
-                                           [Type, Failure, Trace]}, State),
-            {stop, {Type, Failure, Trace}, FState}
+                                           [Class, Reason, StackTrace]}, State),
+            {stop, {Class, Reason, StackTrace}, FState}
     end;
 connected(_Event, State) ->
     {next_state, connected, State}.
@@ -325,7 +325,7 @@ handle_info({Proto, Socket, _Data}, _SN, State=#state{socket=Socket}) when
         Proto == tcp; Proto == ssl ->
     %% req =/= undefined: received a new request while another was in
     %% progress -> Error
-    lager:debug("Received a new PB socket request"
+    ?LOG_DEBUG("Received a new PB socket request"
                 " while another was in progress"),
     State1 = send_error_and_flush("Cannot send another request while one is in progress", State),
     {stop, normal, State1};
@@ -339,15 +339,14 @@ handle_info(StreamMessage, StateName, #state{req={Service,ReqId,StreamState}}=St
         {next_state, StateName, NewState, 0}
     catch
         %% Tell the client we errored before closing the connection.
-        ?_exception_(Type, Reason, StackToken) ->
-            Trace = ?_get_stacktrace_(StackToken),
+        Class:Reason:Stacktrace ->
             FState = send_error_and_flush({format, "Error processing stream message: ~p:~p:~p",
-                                          [Type, Reason, Trace]}, State),
-            {stop, {Type, Reason, Trace}, FState}
+                                          [Class, Reason, Stacktrace]}, State),
+            {stop, {Class, Reason, Stacktrace}, FState}
     end;
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
-    lager:error("Unrecognized message ~p", [Message]),
+    ?LOG_ERROR("Unrecognized message ~p", [Message]),
     {next_state, StateName, State, 0}.
 
 
@@ -387,7 +386,7 @@ decode_buffer(StateName, State=#state{socket=Socket,
                     Stop
             end;
         {ok, Binary, Rest} ->
-            lager:error("Unexpected message format! Message: ~p, Rest: ~p", [Binary, Rest]),
+            ?LOG_ERROR("Unexpected message format! Message: ~p, Rest: ~p", [Binary, Rest]),
             {stop, badmessage, State};
         {more, _Length} ->
             Control:setopts(Socket, [{active, once}]),
@@ -482,7 +481,7 @@ send_encoded_message_or_error(Service, ReplyMessage, ServerState) ->
         {ok, Encoded} ->
             send_message(Encoded, ServerState);
         Error ->
-            lager:error("PB service ~p could not encode message ~p: ~p",
+            ?LOG_ERROR("PB service ~p could not encode message ~p: ~p",
                         [Service, ReplyMessage, Error]),
             send_error("Internal service error: no encoding for response message", ServerState)
     end.
