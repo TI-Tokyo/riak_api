@@ -69,14 +69,6 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--ifdef(deprecated_21).
-ssl_handshake(Socket, SslOpts) ->
-    ssl:handshake(Socket, SslOpts).
--else.
-ssl_handshake(Socket, SslOpts) ->
-    ssl:ssl_accept(Socket, SslOpts).
--endif.
-
 %% Protobuf message code for switching between protobuf and native
 %% Erlang encoding.
 -define(PB_TOGGLE_ENCODING, 110).
@@ -146,7 +138,7 @@ wait_for_tls({msg, MsgCode, _MsgData}, State=#state{socket=Socket,
             %% got STARTTLS msg, send ACK back to client
             Transport:send(Socket, <<1:32/unsigned-big, MsgCode:8>>),
             %% now do the SSL handshake
-            case ssl_handshake(Socket, riak_api_ssl:options()) of
+            case ssl:handshake(Socket, riak_api_ssl:options()) of
                 {ok, NewSocket} ->
                     CommonName = case ssl:peercert(NewSocket) of
                         {ok, Cert} ->
