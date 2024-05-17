@@ -51,6 +51,7 @@ options() ->
      %% we don't care if the peer doesn't
      %% send a certificate
      {verify, verify_peer},
+     {fail_if_no_peer_cert, false},
      {reuse_sessions, false} %% required!
     ] ++
     %% conditionally include the honor cipher order, don't pass it if it
