@@ -1,11 +1,11 @@
 # `riak_api` - Riak Client APIs
 
+![Riak API OpenRiak Status](https://github.com/OpenRiak/riak_api/actions/workflows/erlang.yml/badge.svg?branch=openriak-3.4)
+
 This OTP application encapsulates services for presenting Riak's
 public-facing interfaces. Currently this means a generic interface for
 exposing Protocol Buffers-based services; HTTP services via Webmachine
 will be moved here at a later time.
-
-[![Erlang CI Actions Status](https://github.com/basho/riak_api/workflows/Erlang%20CI/badge.svg)](https://github.com/basho/riak_api/actions)
 
 ## Contributing
 
