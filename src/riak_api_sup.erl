@@ -31,23 +31,18 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
--define(CHILD(I, Type, Args), {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type), #{id => I, start => {I, start_link, []}, type => Type}).
+-define(CHILD(I, Type, Args), #{id => I, start => {I, start_link, Args}, type => Type}).
 -define(LNAME(IP, Port), lists:flatten(io_lib:format("pb://~p:~p", [IP, Port]))).
--define(PB_LISTENER(IP, Port), {?LNAME(IP, Port),
-                                {riak_api_pb_listener, start_link, [IP, Port]},
-                                permanent, 5000, worker, [riak_api_pb_listener]}).
-%% @doc Starts the supervisor.
+-define(PB_LISTENER(IP, Port), #{id => ?LNAME(IP, Port),
+                                 start => {riak_api_pb_listener, start_link, [IP, Port]},
+                                 modules => [riak_api_pb_listener]
+                                }).
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-%% @doc The init/1 supervisor callback, initializes the supervisor.
--spec init(list()) -> {ok,{{RestartStrategy,MaxR,MaxT},[ChildSpec]}} | ignore when
-      RestartStrategy :: supervisor:strategy(),
-      MaxR :: pos_integer(),
-      MaxT :: pos_integer(),
-      ChildSpec :: supervisor:child_spec().
+-spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}} | ignore.
 init([]) ->
     Helper = ?CHILD(riak_api_pb_registration_helper, worker),
     Registrar = ?CHILD(riak_api_pb_registrar, worker),
