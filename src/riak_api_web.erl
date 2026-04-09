@@ -26,7 +26,8 @@
 
 
 -export([get_listeners/0,
-         binding_config/2]).
+         binding_config/2,
+         spec_name/3]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -82,6 +83,8 @@ add_recbuf(Options) ->
             Options
     end.
 
+%% also used in riak_admin_api, for uniformity of naming of webmachine processes
+-spec spec_name(http|https, tuple(), non_neg_integer()) -> string().
 spec_name(Scheme, Ip, Port) ->
     FormattedIP = if is_tuple(Ip); tuple_size(Ip) == 4 ->
                           inet_parse:ntoa(Ip);
